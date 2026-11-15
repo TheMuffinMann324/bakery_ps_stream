@@ -30,6 +30,9 @@ fn main() -> eframe::Result {
     eframe::run_native(
         "PS Stream",
         options,
-        Box::new(|cc| Ok(Box::new(app::App::new(cc)?))),
+        Box::new(|cc| {
+            theme::apply_window_chrome(cc);
+            Ok(Box::new(app::App::new(cc)?))
+        }),
     )
 }

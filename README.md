@@ -27,6 +27,12 @@ To wake a linked console, enable network wake and internet access in the console
 
 Disconnect before switching modes. **F1** opens the stream menu and keyboard mapping. **F11** toggles fullscreen, and **Esc** returns to windowed mode.
 
+## Screen sharing and audio
+
+Enable **Streamer mode** in **Settings** before sharing your screen. Bakery replaces console names with numbered labels, hides network addresses and game titles, masks pairing fields, and hides the app's logs. The live PlayStation video can still show information from your console.
+
+Set **Stream volume** in **Settings**, or press **F1** during a stream to adjust it live. Set it to 0% to mute playback on your PC.
+
 <details>
 <summary>Stream settings screenshot</summary>
 
@@ -62,3 +68,5 @@ Bakery PS Stream uses Windows Data Protection API (DPAPI) to protect settings an
 Maintained by [Muffin](https://github.com/TheMuffinMann324). Remote Play discovery, registration, and streaming are powered by **libchiaki** from [chiaki-ng](https://github.com/streetpea/chiaki-ng), maintained by StreetPea and contributors and based on [Chiaki](https://github.com/thestr4ng3r/chiaki) by Florian Märkl (thestr4ng3r). The interface uses [Geist](https://github.com/vercel/geist-font) by the Geist Project Authors under the [SIL Open Font License](assets/fonts/OFL.txt). See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for more credits.
 
 Bakery PS Stream is licensed under the [GNU Affero General Public License v3.0](LICENSE). Each GitHub release includes corresponding source. PlayStation, PS4 and PS5 are trademarks of Sony Interactive Entertainment. Bakery PS Stream is an independent project.
+
+The build pins [chiaki-ng commit `43728af`](https://github.com/chiaki-ng/chiaki-ng/commit/43728af2e639fecb8a7af1cd68c29820a40de973), which includes [v1.10.1](https://github.com/chiaki-ng/chiaki-ng/releases/tag/v1.10.1). Bakery implements its own Windows interface, controller input, and video renderer. Remote Play over PSN, automatic pairing, HDR output, and DualSense haptics and adaptive triggers are available through the upstream client.

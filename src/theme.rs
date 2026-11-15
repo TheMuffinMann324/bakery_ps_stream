@@ -6,7 +6,11 @@ use eframe::egui::{
     self, Color32, CornerRadius, FontData, FontDefinitions, FontFamily, FontId, Margin, Response,
     RichText, Sense, Shadow, Stroke, StrokeKind, TextStyle, Vec2,
 };
+use raw_window_handle::{HasWindowHandle as _, RawWindowHandle};
 use std::sync::Arc;
+use windows_sys::Win32::Graphics::Dwm::{
+    DWMWA_CAPTION_COLOR, DWMWA_TEXT_COLOR, DWMWA_USE_IMMERSIVE_DARK_MODE, DwmSetWindowAttribute,
+};
 
 // Surfaces.
 pub const BG: Color32 = Color32::from_rgb(0x0e, 0x0f, 0x13); // --background
@@ -651,4 +655,32 @@ pub fn divider(ui: &mut egui::Ui) {
     ui.painter()
         .hline(rect.x_range(), rect.top(), Stroke::new(1.0, BORDER));
     ui.add_space(1.0);
+}
+pub fn apply_window_chrome(cc: &eframe::CreationContext<'_>) {
+    let Ok(window) = cc.window_handle() else {
+        return;
+    };
+    let RawWindowHandle::Win32(handle) = window.as_raw() else {
+        return;
+    };
+    let hwnd = handle.hwnd.get() as _;
+    let color_ref = |color: Color32| u32::from_le_bytes([color.r(), color.g(), color.b(), 0]);
+    // Set the native caption while eframe's window is still hidden. Explicit
+    // caption colors are supported on Windows 11; older builds use dark mode.
+    for (attribute, value) in [
+        (DWMWA_USE_IMMERSIVE_DARK_MODE, 1),
+        (DWMWA_CAPTION_COLOR, color_ref(PANEL)),
+        (DWMWA_TEXT_COLOR, color_ref(TEXT)),
+    ] {
+        // SAFETY: cc owns a live Win32 window, and each attribute takes a
+        // pointer to one 32-bit value borrowed for the duration of this call.
+        unsafe {
+            DwmSetWindowAttribute(
+                hwnd,
+                attribute as u32,
+                (&raw const value).cast(),
+                size_of::<u32>() as u32,
+            );
+        }
+    }
 }

@@ -65,6 +65,8 @@ pub struct Settings {
     pub hw_decode: bool,
     pub keyboard_controls: bool,
     pub fullscreen_on_connect: bool,
+    pub streamer_mode: bool,
+    pub volume_percent: u8,
     /// Watch only: connect using a separate PSN account with app controls disabled.
     pub watch_only: bool,
 }
@@ -80,6 +82,8 @@ impl Default for Settings {
             hw_decode: true,
             keyboard_controls: true,
             fullscreen_on_connect: false,
+            streamer_mode: false,
+            volume_percent: 100,
             watch_only: false,
         }
     }
@@ -229,6 +233,8 @@ mod tests {
         .unwrap();
 
         assert!(config.watch_hosts.is_empty());
+        assert!(!config.settings.streamer_mode);
+        assert_eq!(config.settings.volume_percent, 100);
         assert_eq!(config.hosts[0].account_id, None);
         assert!(
             config
@@ -245,6 +251,8 @@ mod tests {
                 .is_ok()
         );
         config.upsert_host(watch, true);
+        config.settings.streamer_mode = true;
+        config.settings.volume_percent = 0;
 
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("config.json");
@@ -262,6 +270,8 @@ mod tests {
         );
         let (reloaded, legacy) = Config::load_from(&path).unwrap();
         assert!(!legacy);
+        assert!(reloaded.settings.streamer_mode);
+        assert_eq!(reloaded.settings.volume_percent, 0);
         assert_eq!(reloaded.hosts[0].regist_key, "play-key");
         assert_eq!(reloaded.watch_hosts[0].regist_key, "watch-key");
         assert_eq!(reloaded.watch_hosts[0].account_id, Some([2; 8]));

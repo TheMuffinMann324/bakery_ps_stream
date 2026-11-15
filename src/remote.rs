@@ -5,6 +5,7 @@ use crate::ffi;
 use parking_lot::Mutex;
 use std::collections::VecDeque;
 use std::ffi::{CStr, CString, c_char, c_int, c_void};
+use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::{Arc, OnceLock};
 
 // ------------------------------------------------------------------- logging
@@ -255,12 +256,14 @@ pub struct StreamOptions {
     pub codec: i32,
     pub bitrate_kbps: u32,
     pub hw_decode: bool,
+    pub volume_percent: u8,
 }
 
 struct SessionShared {
     status: Mutex<SessionStatus>,
     nickname: Mutex<Option<String>>,
     audio: Mutex<Option<AudioOutput>>,
+    volume: Arc<AtomicU8>,
     ctx: eframe::egui::Context,
 }
 
@@ -298,7 +301,7 @@ unsafe extern "C" fn session_event_cb(
 unsafe extern "C" fn audio_settings_cb(channels: u32, rate: u32, user: *mut c_void) {
     let shared = unsafe { &*(user as *const SessionShared) };
     log_line(format!("[I] Audio stream: {channels} ch @ {rate} Hz"));
-    let out = match AudioOutput::new(channels as u16, rate) {
+    let out = match AudioOutput::new(channels as u16, rate, Arc::clone(&shared.volume)) {
         Ok(out) => Some(out),
         Err(e) => {
             log_line(format!("[E] Audio output unavailable: {e:#}"));
@@ -333,6 +336,7 @@ impl Session {
             status: Mutex::new(SessionStatus::Connecting),
             nickname: Mutex::new(None),
             audio: Mutex::new(None),
+            volume: Arc::new(AtomicU8::new(opts.volume_percent)),
             ctx,
         });
         let host_c = CString::new(addr)?;
@@ -373,6 +377,10 @@ impl Session {
 
     pub fn status(&self) -> SessionStatus {
         self.shared.status.lock().clone()
+    }
+
+    pub fn set_volume(&self, percent: u8) {
+        self.shared.volume.store(percent, Ordering::Relaxed);
     }
 
     pub fn nickname(&self) -> Option<String> {

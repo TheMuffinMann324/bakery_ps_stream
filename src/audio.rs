@@ -6,7 +6,8 @@ use anyhow::Context as _;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use ringbuf::traits::{Consumer, Observer, Producer, Split};
 use ringbuf::{HeapCons, HeapProd, HeapRb};
-use std::sync::mpsc;
+use std::sync::atomic::{AtomicU8, Ordering};
+use std::sync::{Arc, mpsc};
 use std::thread::JoinHandle;
 
 /// Keep at most this much audio queued; anything above is dropped to stay in sync.
@@ -21,7 +22,7 @@ pub struct AudioOutput {
 }
 
 impl AudioOutput {
-    pub fn new(channels: u16, rate: u32) -> anyhow::Result<Self> {
+    pub fn new(channels: u16, rate: u32, volume: Arc<AtomicU8>) -> anyhow::Result<Self> {
         anyhow::ensure!(channels > 0 && rate > 0, "invalid audio format");
         let capacity = (rate as usize * channels as usize) / 2; // 500 ms
         let (producer, consumer) = HeapRb::<i16>::new(capacity).split();
@@ -29,18 +30,19 @@ impl AudioOutput {
         // cpal streams are not guaranteed to be Send, so the stream lives on its own thread.
         let (ready_tx, ready_rx) = mpsc::channel::<anyhow::Result<()>>();
         let (stop_tx, stop_rx) = mpsc::channel::<()>();
-        let thread = std::thread::Builder::new()
-            .name("audio-out".into())
-            .spawn(move || match build_stream(consumer, channels, rate) {
-                Ok(stream) => {
-                    let _ = ready_tx.send(Ok(()));
-                    let _ = stop_rx.recv();
-                    drop(stream);
-                }
-                Err(e) => {
-                    let _ = ready_tx.send(Err(e));
-                }
-            })?;
+        let thread =
+            std::thread::Builder::new().name("audio-out".into()).spawn(
+                move || match build_stream(consumer, channels, rate, volume) {
+                    Ok(stream) => {
+                        let _ = ready_tx.send(Ok(()));
+                        let _ = stop_rx.recv();
+                        drop(stream);
+                    }
+                    Err(e) => {
+                        let _ = ready_tx.send(Err(e));
+                    }
+                },
+            )?;
         ready_rx.recv().context("audio thread exited")??;
 
         Ok(Self {
@@ -79,6 +81,7 @@ fn build_stream(
     mut consumer: HeapCons<i16>,
     src_channels: u16,
     src_rate: u32,
+    volume: Arc<AtomicU8>,
 ) -> anyhow::Result<cpal::Stream> {
     let host = cpal::default_host();
     let device = host
@@ -102,6 +105,7 @@ fn build_stream(
     let mut primed = false;
 
     let mut fill = move |out: &mut dyn FnMut(usize, f32), frames: usize| {
+        let gain = f32::from(volume.load(Ordering::Relaxed).min(100)) / 100.0;
         for i in 0..frames {
             while pos >= 1.0 || !primed {
                 prev.copy_from_slice(&next);
@@ -128,7 +132,7 @@ fn build_stream(
                 } else {
                     0.0
                 };
-                out(i * dst_channels + c, v);
+                out(i * dst_channels + c, v * gain);
             }
             pos += step;
         }

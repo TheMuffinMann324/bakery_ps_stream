@@ -1,6 +1,6 @@
 {
   "name": "ps-stream",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "dependencies": [
     { "name": "curl", "default-features": false, "features": ["ssl", "sspi", "websockets"] },
     { "name": "ffmpeg", "default-features": false, "features": ["avcodec", "avformat"] },

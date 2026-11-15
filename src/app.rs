@@ -91,6 +91,14 @@ impl HostRow {
         }
     }
 
+    fn display_name(&self, index: usize, streamer_mode: bool) -> String {
+        if streamer_mode {
+            format!("Console {}", index + 1)
+        } else {
+            self.name.clone()
+        }
+    }
+
     fn status(&self) -> (&'static str, Option<Color32>) {
         if self.awake {
             ("Online", Some(LIVE))
@@ -252,6 +260,7 @@ impl App {
             codec: s.codec,
             bitrate_kbps: s.bitrate_kbps,
             hw_decode: s.hw_decode,
+            volume_percent: s.volume_percent,
         };
         match Session::start(ctx.clone(), &row.addr, &host, &account, &opts) {
             Ok(session) => {
@@ -365,7 +374,7 @@ impl App {
                     .show(ui, |ui| match self.page {
                         Page::Consoles => self.consoles_page(ui, &ctx, &rows),
                         Page::Settings => self.settings_page(ui),
-                        Page::Log => log_page(ui),
+                        Page::Log => log_page(ui, self.config.settings.streamer_mode),
                     });
             });
 
@@ -411,8 +420,14 @@ impl App {
             });
         });
 
-        if let Some((msg, is_err)) = self.banner.clone() {
-            theme::notice(ui, &msg, is_err);
+        let streamer_mode = self.config.settings.streamer_mode;
+        if let Some((msg, is_err)) = &self.banner {
+            let summary = if *is_err {
+                "Console action failed."
+            } else {
+                "Console action completed."
+            };
+            theme::notice(ui, screen_text(streamer_mode, msg, summary), *is_err);
             ui.add_space(14.0);
         }
 
@@ -428,7 +443,7 @@ impl App {
         let mut action = None;
         match hero {
             Some(i) => {
-                if let Some(a) = self.hero_ui(ui, &rows[i]) {
+                if let Some(a) = self.hero_ui(ui, &rows[i], i) {
                     action = Some((i, a));
                 }
             }
@@ -456,7 +471,7 @@ impl App {
         ui.horizontal_wrapped(|ui| {
             ui.spacing_mut().item_spacing = Vec2::new(12.0, 12.0);
             for (i, row) in rows.iter().enumerate() {
-                if console_tile(ui, row, Some(i) == hero).clicked() {
+                if console_tile(ui, row, i, Some(i) == hero, streamer_mode).clicked() {
                     self.selected = Some(row.key());
                 }
             }
@@ -477,10 +492,11 @@ impl App {
 
     /// Large panel for the selected console: art on the left, details and the
     /// stream controls on the right.
-    fn hero_ui(&mut self, ui: &mut egui::Ui, row: &HostRow) -> Option<HostAction> {
+    fn hero_ui(&mut self, ui: &mut egui::Ui, row: &HostRow, index: usize) -> Option<HostAction> {
         let mut action = None;
         let mut changed = false;
         let mut open_settings = false;
+        let streamer_mode = self.config.settings.streamer_mode;
         theme::panel().show(ui, |ui| {
             let width = ui.available_width();
             ui.set_width(width);
@@ -507,13 +523,15 @@ impl App {
                         };
                         theme::status_badge(ui, eyebrow, color);
                         ui.add_space(4.0);
-                        ui.label(RichText::new(row.name.to_uppercase()).size(30.0).family(theme::black()).color(TEXT).extra_letter_spacing(-0.6));
+                        ui.label(RichText::new(row.display_name(index, streamer_mode).to_uppercase()).size(30.0).family(theme::black()).color(TEXT).extra_letter_spacing(-0.6));
+                        let model = if row.ps5 { "PlayStation 5" } else { "PlayStation 4" };
+                        let address = screen_text(streamer_mode, &row.addr, "Address hidden");
                         ui.label(
-                            RichText::new(format!("{} · {}", if row.ps5 { "PlayStation 5" } else { "PlayStation 4" }, row.addr))
+                            RichText::new(format!("{model} · {address}"))
                                 .size(11.5)
                                 .color(TEXT_DIM),
                         );
-                        if !row.running_app.is_empty() {
+                        if !streamer_mode && !row.running_app.is_empty() {
                             ui.add_space(2.0);
                             ui.horizontal(|ui| {
                                 ui.label(RichText::new("NOW PLAYING").size(9.5).family(theme::extrabold()).color(white(0x70)).extra_letter_spacing(1.0));
@@ -648,14 +666,17 @@ impl App {
             "Account, stream quality and controls",
         );
         let mut changed = false;
-        if let Some((message, true)) = &self.banner {
-            theme::notice(ui, message, true);
-        }
         let s = &mut self.config.settings;
 
         theme::panel().show(ui, |ui| {
             ui.set_width(ui.available_width());
             ui.spacing_mut().item_spacing.y = 0.0;
+            settings_row(ui, Icon::Monitor, "Streamer mode", "Hide console details, pairing fields and logs while sharing your screen.", |ui| {
+                changed |= theme::switch(ui, &mut s.streamer_mode).changed();
+            }, |_| {});
+            if let Some((message, true)) = &self.banner {
+                theme::notice(ui, screen_text(s.streamer_mode, message, "Settings or console action failed."), true);
+            }
 
             let (id_txt, id_col) = match s.account_id_bytes() {
                 Ok(_) => ("Valid account ID".to_owned(), Color32::from_rgb(0xb5, 0xd4, 0xc3)),
@@ -706,6 +727,9 @@ impl App {
             settings_row(ui, Icon::Gear, "Hardware decoding", "Decode video on the GPU (D3D11VA) for the lowest latency. Falls back to the CPU if unavailable.", |ui| {
                 changed |= theme::switch(ui, &mut s.hw_decode).changed();
             }, |_| {});
+            settings_row(ui, Icon::Gamepad, "Stream volume", "Adjust audio playback on this PC.", |ui| {
+                changed |= volume_slider(ui, &mut s.volume_percent).changed();
+            }, |_| {});
             settings_row(ui, Icon::Gamepad, "Stream mode", "Watch only uses a separate console link so you can play with the controller on your main account.", |ui| {
                 segmented_bool(ui, &mut s.watch_only, "Watch only", "Play", &mut changed);
             }, |_| {});
@@ -728,6 +752,7 @@ impl App {
     }
 
     fn register_dialog(&mut self, ctx: &egui::Context) {
+        let streamer_mode = self.config.settings.streamer_mode;
         let Some(dlg) = self.register.as_mut() else {
             return;
         };
@@ -791,6 +816,7 @@ impl App {
                     ui.horizontal(|ui| {
                         ui.add(
                             egui::TextEdit::singleline(&mut dlg.addr)
+                                .password(streamer_mode)
                                 .hint_text("192.168.1.50")
                                 .desired_width(250.0)
                                 .margin(Margin::symmetric(10, 9)),
@@ -802,7 +828,9 @@ impl App {
                     });
                     ui.add_space(8.0);
                 } else {
-                    ui.label(RichText::new(format!("{} · {}", if dlg.ps5 { "PS5" } else { "PS4" }, dlg.addr)).size(11.0).color(TEXT_DIM));
+                    let model = if dlg.ps5 { "PS5" } else { "PS4" };
+                    let address = screen_text(streamer_mode, &dlg.addr, "Address hidden");
+                    ui.label(RichText::new(format!("{model} · {address}")).size(11.0).color(TEXT_DIM));
                     ui.add_space(4.0);
                 });
 
@@ -810,6 +838,7 @@ impl App {
                     field_label(ui, "Second PSN account ID");
                     ui.add_enabled(dlg.running.is_none(),
                         egui::TextEdit::singleline(&mut dlg.watch_account)
+                            .password(true)
                             .hint_text("Base64 account ID")
                             .desired_width(f32::INFINITY)
                             .margin(Margin::symmetric(10, 9)),
@@ -835,6 +864,7 @@ impl App {
                 field_label(ui, "Code");
                 let resp = ui.add_enabled(dlg.running.is_none(),
                     egui::TextEdit::singleline(&mut dlg.pin)
+                        .password(streamer_mode)
                         .hint_text("00000000")
                         .char_limit(8)
                         .font(egui::FontId::new(22.0, theme::semibold()))
@@ -845,7 +875,8 @@ impl App {
                 dlg.pin.retain(|c| c.is_ascii_digit());
                 if let Some(e) = &dlg.error {
                     ui.add_space(6.0);
-                    theme::notice(ui, e, true);
+                    let summary = "Could not link. Check the account ID, address and pairing code.";
+                    theme::notice(ui, screen_text(streamer_mode, e, summary), true);
                 }
                 ui.add_space(16.0);
                 ui.horizontal(|ui| {
@@ -910,6 +941,8 @@ impl App {
         let mut leave = false;
         let mut toggle_fullscreen = false;
         let keyboard = self.config.settings.keyboard_controls;
+        let streamer_mode = self.config.settings.streamer_mode;
+        let mut volume_changed = false;
 
         let Some(st) = self.streaming.as_mut() else {
             return;
@@ -1003,9 +1036,12 @@ impl App {
                         overlay(ui, rect, |ui| {
                             theme::eyebrow(ui, "Connecting");
                             ui.label(
-                                RichText::new(st.title.to_uppercase())
-                                    .size(20.0)
-                                    .family(theme::black()),
+                                RichText::new(
+                                    screen_text(streamer_mode, &st.title, "PlayStation")
+                                        .to_uppercase(),
+                                )
+                                .size(20.0)
+                                .family(theme::black()),
                             );
                             ui.add(egui::Spinner::new().size(18.0).color(TEXT_DIM));
                             if ui.add(theme::outline_button("Cancel")).clicked() {
@@ -1061,7 +1097,9 @@ impl App {
                                     .size(20.0)
                                     .family(theme::black()),
                             );
-                            ui.label(RichText::new(reason).size(11.0).color(TEXT_DIM));
+                            if !streamer_mode {
+                                ui.label(RichText::new(reason).size(11.0).color(TEXT_DIM));
+                            }
                             if ui.add(theme::primary_button("Back to consoles")).clicked() {
                                 leave = true;
                             }
@@ -1073,18 +1111,19 @@ impl App {
                 if st.menu_open {
                     overlay(ui, rect, |ui| {
                         theme::eyebrow(ui, "Streaming");
-                        ui.label(
-                            RichText::new(
-                                st.session
-                                    .nickname()
-                                    .unwrap_or_else(|| st.title.clone())
-                                    .to_uppercase(),
-                            )
-                            .size(20.0)
-                            .family(theme::black()),
-                        );
+                        let name = if streamer_mode {
+                            "PLAYSTATION".to_owned()
+                        } else {
+                            st.session
+                                .nickname()
+                                .unwrap_or_else(|| st.title.clone())
+                                .to_uppercase()
+                        };
+                        ui.label(RichText::new(name).size(20.0).family(theme::black()));
                         let pad = if watch_only {
                             "Use your main account with the controller on the console.".to_owned()
+                        } else if streamer_mode {
+                            "PC controls".to_owned()
                         } else {
                             self.input
                                 .active_gamepad_name()
@@ -1093,6 +1132,14 @@ impl App {
                         ui.horizontal(|ui| {
                             theme::icon(ui, Icon::Gamepad, 15.0, TEXT_DIM);
                             ui.label(RichText::new(pad).size(11.0).color(TEXT_DIM));
+                        });
+                        ui.horizontal(|ui| {
+                            ui.label("Volume");
+                            if volume_slider(ui, &mut self.config.settings.volume_percent).changed()
+                            {
+                                st.session.set_volume(self.config.settings.volume_percent);
+                                volume_changed = true;
+                            }
                         });
                         ui.add_space(4.0);
                         ui.horizontal(|ui| {
@@ -1145,6 +1192,9 @@ impl App {
                 }
             });
 
+        if volume_changed {
+            self.config.save();
+        }
         if leave {
             self.streaming = None; // stops and joins the session
             self.video.clear();
@@ -1166,6 +1216,14 @@ impl App {
             ctx.request_repaint_after(Duration::from_millis(250));
         }
     }
+}
+
+fn screen_text<'a>(streamer_mode: bool, text: &'a str, hidden: &'a str) -> &'a str {
+    if streamer_mode { hidden } else { text }
+}
+
+fn volume_slider(ui: &mut egui::Ui, percent: &mut u8) -> egui::Response {
+    ui.add(egui::Slider::new(percent, 0..=100).suffix("%"))
 }
 
 fn stream_controls(
@@ -1252,7 +1310,13 @@ fn paint_glow(p: &egui::Painter, center: egui::Pos2, radius: f32) {
 }
 
 /// Compact console tile for the "Your consoles" row.
-fn console_tile(ui: &mut egui::Ui, row: &HostRow, selected: bool) -> egui::Response {
+fn console_tile(
+    ui: &mut egui::Ui,
+    row: &HostRow,
+    index: usize,
+    selected: bool,
+    streamer_mode: bool,
+) -> egui::Response {
     let size = Vec2::new(214.0, 104.0);
     let (rect, resp) = ui.allocate_exact_size(size, egui::Sense::click());
     let p = ui.painter();
@@ -1292,14 +1356,14 @@ fn console_tile(ui: &mut egui::Ui, row: &HostRow, selected: bool) -> egui::Respo
     p.text(
         inner.left_top() + Vec2::new(0.0, 28.0),
         egui::Align2::LEFT_TOP,
-        &row.name,
+        row.display_name(index, streamer_mode),
         egui::FontId::new(14.0, theme::semibold()),
         TEXT,
     );
     let sub = if row.link().is_none() {
-        "Not linked".to_owned()
+        "Not linked"
     } else {
-        row.addr.clone()
+        screen_text(streamer_mode, &row.addr, "Address hidden")
     };
     p.text(
         inner.left_bottom(),
@@ -1383,13 +1447,17 @@ fn chip(ui: &mut egui::Ui, text: &str) -> egui::Response {
         .on_hover_cursor(egui::CursorIcon::PointingHand)
 }
 
-fn log_page(ui: &mut egui::Ui) {
+fn log_page(ui: &mut egui::Ui, streamer_mode: bool) {
     theme::page_heading(
         ui,
         "PS Stream / Log",
         "Console & logs",
         "Output from the streaming engine",
     );
+    if streamer_mode {
+        theme::notice(ui, "Logs are hidden in Streamer mode.", false);
+        return;
+    }
     theme::panel().show(ui, |ui| {
         ui.set_width(ui.available_width());
         ui.spacing_mut().item_spacing.y = 0.0;
@@ -1631,5 +1699,57 @@ impl eframe::App for App {
         } else {
             self.home_ui(ui);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn streamer_mode_hides_console_tile_and_log_details() {
+        let row = HostRow {
+            name: "Private console name".into(),
+            addr: "192.0.2.42".into(),
+            ps5: true,
+            awake: true,
+            standby: false,
+            seen: true,
+            running_app: String::new(),
+            saved: Some(SavedHost {
+                nickname: "Private console name".into(),
+                mac: "000000000000".into(),
+                ps5: true,
+                last_addr: "192.0.2.42".into(),
+                regist_key: String::new(),
+                rp_key: String::new(),
+                account_id: None,
+            }),
+            watch_saved: None,
+        };
+        let render = |streamer_mode| {
+            let ctx = egui::Context::default();
+            let mut output = ctx.run_ui(egui::RawInput::default(), |ui| {
+                console_tile(ui, &row, 0, true, streamer_mode);
+                log_page(ui, streamer_mode);
+            });
+            output.textures_delta.clear();
+            output
+                .shapes
+                .into_iter()
+                .filter_map(|shape| match shape.shape {
+                    egui::Shape::Text(text) => Some(text.galley.text().to_owned()),
+                    _ => None,
+                })
+                .collect::<Vec<_>>()
+        };
+        let normal = render(false).join("\n");
+        assert!(normal.contains("Private console name"));
+        assert!(normal.contains("192.0.2.42"));
+        let shared = render(true).join("\n");
+        assert!(shared.contains("Console 1"));
+        assert!(shared.contains("Logs are hidden"));
+        assert!(!shared.contains("Private console name"));
+        assert!(!shared.contains("192.0.2.42"));
     }
 }

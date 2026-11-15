@@ -1,0 +1,16 @@
+{
+  "name": "ps-stream",
+  "version": "0.1.0",
+  "dependencies": [
+    { "name": "curl", "default-features": false, "features": ["ssl", "sspi", "websockets"] },
+    { "name": "ffmpeg", "default-features": false, "features": ["avcodec", "avformat"] },
+    "json-c",
+    "libevent",
+    "miniupnpc",
+    "openssl",
+    "opus",
+    "pkgconf",
+    "protobuf"
+  ],
+  "builtin-baseline": "8f363bdc11359ede4bc51e5eb32a2617538049c8"
+}

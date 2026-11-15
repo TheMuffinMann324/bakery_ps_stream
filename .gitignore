@@ -1,0 +1,11 @@
+/target/
+/vcpkg_installed/
+/dist/
+/.venv/
+/config.json
+/config.dpapi
+*.log
+*.pdb
+.env
+.env.*
+__pycache__/

@@ -1,0 +1,34 @@
+[package]
+name = "ps-stream"
+version = "0.1.0"
+edition = "2024"
+description = "PS5 and PS4 Remote Play client for Windows, built on chiaki-ng's libchiaki"
+license = "AGPL-3.0-only"
+build = "build.rs"
+
+[dependencies]
+eframe = { version = "0.37", default-features = false, features = ["wgpu", "default_fonts", "clipboard", "accesskit"] }
+cpal = "0.18"
+gilrs = "0.11"
+ringbuf = "0.6"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+directories = "6"
+base64 = "0.23"
+parking_lot = "0.13"
+anyhow = "1"
+bytemuck = { version = "1", features = ["derive"] }
+resvg = { version = "0.50", default-features = false }
+
+tempfile = "3.27"
+windows-sys = { version = "0.61", features = ["Win32_Security_Cryptography"] }
+
+[build-dependencies]
+cmake = "0.1"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+
+[profile.dev.package."*"]
+opt-level = 2

@@ -1,8 +1,8 @@
 # Bakery PS Stream
 
-Play PS5 and PS4 games over your local network on a Windows PC. Use **Play** for PC gamepad or keyboard controls, or **Watch only** to keep playing on the console while the PC displays the stream.
+Stream PS5 and PS4 games over your local network to a Windows PC. Link a console once, then **Play** with a gamepad or keyboard on the PC, or **Watch** with PC controls turned off.
 
-![Bakery PS Stream console list with sample PS5 consoles](docs/screenshots/consoles.png)
+![Bakery PS Stream dashboard with sample PS5 and PS4 consoles](docs/screenshots/consoles.png)
 
 ## Download
 
@@ -13,25 +13,27 @@ Play PS5 and PS4 games over your local network on a Windows PC. Use **Play** for
 ## Link a console
 
 1. Enable **Remote Play**. On PS5, go to **Settings → System → Remote Play**. On PS4, go to **Settings → Remote Play Connection Settings** and activate the console as your primary PS4 under **Account Management**.
-2. In **Settings** in Bakery PS Stream, paste your base64 PSN account ID. See the [chiaki-ng account ID and pairing guide](https://chiaki-ng.github.io/chiaki-ng/setup/configuration/#registering-your-playstation).
-3. Select your console and click **Link console**. If discovery misses it, choose **Add console** and enter its local IP address.
-4. Enter the 8-digit code from **Link Device** on PS5 or **Add Device** on PS4. After linking, click **Start stream**.
+2. Select your console and click **Link console**. If discovery misses it, choose **Add console** and enter its local IP address.
+3. Use a saved PSN account ID or paste your base64 PSN account ID into the pairing dialog. Select **How to find it** for the account ID guide.
+4. Enter the 8-digit code from **Link Device** on PS5 or **Add Device** on PS4. After linking, click **Play** or **Watch**.
 
 To wake a linked console, enable network wake and internet access in the console’s rest-mode settings. If a stream stutters, try Ethernet or reduce the resolution, bitrate, or frame rate. Base PS4 models support up to 720p, and PS4 streams use H.264.
 
 ## Watch while playing on the console
 
-1. Sign in to the console with a second PSN account and enable Remote Play.
-2. In Bakery PS Stream, select **Watch only → Link for Watch only** and use the second account’s ID and linking code.
-3. Click **Watch stream**. Use the controller connected to the console with your main account.
+One console link covers both **Play** and **Watch**. Watch turns off controller and keyboard input from the PC.
+
+Optionally, add a second PSN account. Watch then streams through that account instead of your main one, so your main account and controller keep playing on the console undisturbed. Click **Add second account** under the console, sign in on the console with the second account, enable Remote Play, and enter its PSN account ID and a fresh pairing code.
+
+On PS5, open **Settings → System → Remote Play** and turn on **Hide Remote Play Connection Status** to suppress the connection pop-up during gameplay. [PlayStation Support](https://www.playstation.com/en-us/support/games/remote-play-settings/)
 
 Disconnect before switching modes. **F1** opens the stream menu and keyboard mapping. **F11** toggles fullscreen, and **Esc** returns to windowed mode.
 
 ## Screen sharing and audio
 
-Enable **Streamer mode** in **Settings** before sharing your screen. Bakery replaces console names with numbered labels, hides network addresses and game titles, masks pairing fields, and hides the app's logs. The live PlayStation video can still show information from your console.
+Enable **Streamer mode** under **Settings → Account & privacy** before sharing your screen. Bakery replaces console names with numbered labels, hides network addresses and game titles, masks pairing fields, and hides the app's logs. The live PlayStation video can still show information from your console.
 
-Set **Stream volume** in **Settings**, or press **F1** during a stream to adjust it live. Set it to 0% to mute playback on your PC.
+Set **Stream volume** under **Settings → Playback**, or press **F1** during a stream to adjust it live. Set it to 0% to mute playback on your PC.
 
 <details>
 <summary>Stream settings screenshot</summary>

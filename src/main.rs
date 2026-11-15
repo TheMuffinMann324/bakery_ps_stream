@@ -20,7 +20,7 @@ fn main() -> eframe::Result {
 
     let options = eframe::NativeOptions {
         viewport: eframe::egui::ViewportBuilder::default()
-            .with_title("PS Stream")
+            .with_title("Bakery PS Stream")
             .with_inner_size([1280.0, 780.0])
             .with_min_inner_size([900.0, 560.0])
             .with_resizable(true),

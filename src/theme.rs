@@ -26,6 +26,8 @@ pub const PRIMARY_FG: Color32 = Color32::from_rgb(0x0b, 0x0c, 0x0f); // text on 
 pub const LIVE: Color32 = Color32::from_rgb(0x4a, 0xde, 0x80);
 pub const STANDBY: Color32 = Color32::from_rgb(0xe0, 0xb8, 0x6a);
 pub const DESTRUCTIVE_TEXT: Color32 = Color32::from_rgb(0xe1, 0xb0, 0xaf);
+/// Cool blue used only for light (glows, selection), never for text blocks.
+pub const ACCENT: Color32 = Color32::from_rgb(0x4f, 0x7c, 0xff);
 
 /// White at `a` (0-255) alpha: Bakery's #ffffffXX borders and overlays.
 pub const fn white(a: u8) -> Color32 {
@@ -39,8 +41,8 @@ pub fn alpha(color: Color32, pct: u8) -> Color32 {
     Color32::from_rgba_unmultiplied(color.r(), color.g(), color.b(), a)
 }
 
-pub const RADIUS_CARD: u8 = 8;
-pub const RADIUS_BUTTON: u8 = 6;
+pub const RADIUS_CARD: u8 = 12;
+pub const RADIUS_BUTTON: u8 = 8;
 pub const RADIUS_INPUT: u8 = 5;
 
 // Geist weights, bundled (SIL Open Font License, see assets/fonts/OFL.txt).
@@ -201,9 +203,9 @@ pub enum Icon {
     Plus,
     Monitor,
     User,
-    Logo,
     Home,
     Power,
+    Eye,
 }
 
 pub fn paint_icon(
@@ -340,23 +342,21 @@ pub fn paint_icon(
                 .collect();
             painter.add(egui::Shape::line(pts, st));
         }
-        Icon::Logo => {
-            // App mark: a rounded play glyph drawn in strokes, like Bakery's ink logo.
-            let st = Stroke::new(size / 13.0, color);
-            let pts = vec![
-                center + vec2(-s * 0.42, -s * 0.62),
-                center + vec2(s * 0.62, 0.0),
-                center + vec2(-s * 0.42, s * 0.62),
-                center + vec2(-s * 0.42, -s * 0.62),
-            ];
-            painter.add(egui::Shape::line(pts, st));
-            let ring = egui::Rect::from_center_size(center, Vec2::splat(size * 0.98));
-            painter.rect_stroke(
-                ring,
-                CornerRadius::same((size * 0.26) as u8),
-                st,
-                StrokeKind::Middle,
-            );
+        Icon::Eye => {
+            // Almond outline: two arcs meeting at the corners, plus the pupil.
+            let n = 18;
+            for sign in [-1.0f32, 1.0] {
+                let pts: Vec<_> = (0..=n)
+                    .map(|i| {
+                        let t = i as f32 / n as f32;
+                        let x = (t * 2.0 - 1.0) * s * 0.95;
+                        let y = sign * (std::f32::consts::PI * t).sin() * s * 0.55;
+                        center + vec2(x, y)
+                    })
+                    .collect();
+                painter.add(egui::Shape::line(pts, st));
+            }
+            painter.circle_stroke(center, s * 0.26, st);
         }
     }
 }
@@ -382,7 +382,7 @@ pub fn panel() -> egui::Frame {
         })
 }
 
-/// White primary button (shadcn default variant), uppercase heavy label.
+/// White primary button for the main action.
 pub fn primary_button(text: &str) -> egui::Button<'static> {
     egui::Button::new(button_text(text).color(PRIMARY_FG))
         .fill(TEXT)
@@ -412,22 +412,68 @@ pub fn danger_button(text: &str) -> egui::Button<'static> {
         .min_size(Vec2::new(0.0, 35.0))
 }
 
-/// Text-only button (ghost variant).
-pub fn ghost_button(text: &str) -> egui::Button<'static> {
-    egui::Button::new(button_text(text).color(TEXT_DIM))
-        .frame(false)
-        .min_size(Vec2::new(0.0, 35.0))
-}
-
 /// Button with a leading line icon (e.g. "+ ADD CONSOLE"), painted directly so
 /// the icon and label are always centred in the 35px pill.
 pub fn icon_button(ui: &mut egui::Ui, icon: Icon, text: &str, primary: bool) -> Response {
     icon_button_sized(ui, icon, text, primary, 35.0, 11.0, 13.0, 14.0)
 }
 
-/// The main call to action (e.g. START STREAM): taller, larger label.
+/// The main call to action (e.g. Play): taller, larger label.
 pub fn big_button(ui: &mut egui::Ui, icon: Icon, text: &str) -> Response {
-    icon_button_sized(ui, icon, text, true, 46.0, 12.5, 14.0, 24.0)
+    icon_button_sized(ui, icon, text, true, 44.0, 13.5, 14.0, 22.0)
+}
+
+/// Secondary call to action next to `big_button`.
+pub fn big_outline_button(ui: &mut egui::Ui, icon: Icon, text: &str) -> Response {
+    icon_button_sized(ui, icon, text, false, 44.0, 13.5, 16.0, 20.0)
+}
+
+/// Soft radial light: a triangle fan fading from `color` at the centre to
+/// transparent at `radius`. Smooth, unlike stacked translucent circles.
+pub fn paint_glow(painter: &egui::Painter, center: egui::Pos2, radius: Vec2, color: Color32) {
+    let mut mesh = egui::Mesh::default();
+    mesh.colored_vertex(center, color);
+    let rings = [(0.35, 0.62), (0.7, 0.22), (1.0, 0.0)];
+    let segments = 64u32;
+    for (scale, strength) in rings {
+        let c = color.gamma_multiply(strength);
+        for i in 0..segments {
+            let a = i as f32 / segments as f32 * std::f32::consts::TAU;
+            mesh.colored_vertex(
+                center + Vec2::new(a.cos() * radius.x, a.sin() * radius.y) * scale,
+                c,
+            );
+        }
+    }
+    for i in 0..segments {
+        let j = (i + 1) % segments;
+        mesh.add_triangle(0, 1 + i, 1 + j);
+        for ring in 0..2 {
+            let a = 1 + ring * segments;
+            let b = a + segments;
+            mesh.add_triangle(a + i, b + i, b + j);
+            mesh.add_triangle(a + i, b + j, a + j);
+        }
+    }
+    painter.add(mesh);
+}
+
+/// Numbered step marker used in the link dialog.
+pub fn step_number(ui: &mut egui::Ui, n: u8, done: bool) {
+    let (rect, _) = ui.allocate_exact_size(Vec2::splat(22.0), Sense::hover());
+    let p = ui.painter();
+    if done {
+        p.circle_filled(rect.center(), 11.0, TEXT);
+    } else {
+        p.circle_stroke(rect.center(), 10.5, Stroke::new(1.0, white(0x40)));
+    }
+    p.text(
+        rect.center(),
+        egui::Align2::CENTER_CENTER,
+        n.to_string(),
+        FontId::new(11.5, semibold()),
+        if done { PRIMARY_FG } else { TEXT },
+    );
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -441,16 +487,15 @@ fn icon_button_sized(
     icon_size: f32,
     pad_x: f32,
 ) -> Response {
-    let label = text.to_uppercase();
+    let label = text;
     let fg = if primary { PRIMARY_FG } else { TEXT };
     let mut job = egui::text::LayoutJob::default();
     job.append(
-        &label,
+        label,
         0.0,
         egui::TextFormat {
-            font_id: FontId::new(font_size, extrabold()),
+            font_id: FontId::new(font_size, semibold()),
             color: fg,
-            extra_letter_spacing: font_size * 0.06,
             ..Default::default()
         },
     );
@@ -458,7 +503,8 @@ fn icon_button_sized(
     let gap = 8.0;
     let size = Vec2::new(pad_x * 2.0 + icon_size + gap + galley.size().x, height);
     let (rect, resp) = ui.allocate_exact_size(size, Sense::click());
-    let hovered = resp.hovered();
+    resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, ui.is_enabled(), text));
+    let hovered = resp.hovered() || resp.has_focus();
     let p = ui.painter();
     if primary {
         // hover: bg-primary/90
@@ -489,10 +535,7 @@ fn icon_button_sized(
 }
 
 fn button_text(text: &str) -> RichText {
-    RichText::new(text.to_uppercase())
-        .family(extrabold())
-        .size(11.0)
-        .extra_letter_spacing(0.66)
+    RichText::new(text).family(semibold()).size(12.0)
 }
 
 /// `.status` badge: tiny text, hairline border, coloured when live.
@@ -541,33 +584,22 @@ pub fn eyebrow(ui: &mut egui::Ui, text: &str) {
     );
 }
 
-/// Kicker breadcrumb, uppercase H1 and uppercase subtitle (racing-theme heading).
-pub fn page_heading(ui: &mut egui::Ui, kicker: &str, title: &str, subtitle: &str) {
-    eyebrow(ui, kicker);
-    ui.add_space(2.0);
+pub fn page_heading(ui: &mut egui::Ui, title: &str) {
     ui.label(
-        RichText::new(title.to_uppercase())
-            .size(22.0)
-            .family(black())
+        RichText::new(title)
+            .size(29.0)
+            .family(semibold())
             .color(TEXT)
-            .extra_letter_spacing(-0.5),
+            .extra_letter_spacing(-0.8),
     );
-    ui.add_space(-2.0);
-    ui.label(
-        RichText::new(subtitle.to_uppercase())
-            .size(10.5)
-            .family(extrabold())
-            .color(white(0x78))
-            .extra_letter_spacing(1.05),
-    );
-    ui.add_space(18.0);
 }
 
-/// Icon-only sidebar entry (`.nav-item`): 44px square, white bar when active.
 pub fn nav_item(ui: &mut egui::Ui, icon: Icon, tooltip: &str, selected: bool) -> Response {
-    let (rect, resp) = ui.allocate_exact_size(Vec2::splat(44.0), Sense::click());
+    let (rect, response) = ui.allocate_exact_size(Vec2::splat(44.0), Sense::click());
+    response
+        .widget_info(|| egui::WidgetInfo::selected(egui::Role::Button, true, selected, tooltip));
     let painter = ui.painter();
-    if selected || resp.hovered() {
+    if selected || response.hovered() || response.has_focus() {
         painter.rect_filled(rect, CornerRadius::same(7), white(0x12));
     }
     if selected {
@@ -577,13 +609,14 @@ pub fn nav_item(ui: &mut egui::Ui, icon: Icon, tooltip: &str, selected: bool) ->
         );
         painter.rect_filled(bar, CornerRadius::same(2), TEXT);
     }
-    let fg = if selected || resp.hovered() {
+    let fg = if selected || response.hovered() {
         TEXT
     } else {
         white(0x80)
     };
     paint_icon(painter, icon, rect.center(), 18.0, fg);
-    resp.on_hover_cursor(egui::CursorIcon::PointingHand)
+    response
+        .on_hover_cursor(egui::CursorIcon::PointingHand)
         .on_hover_text(tooltip)
 }
 

@@ -67,7 +67,7 @@ pub struct Settings {
     pub fullscreen_on_connect: bool,
     pub streamer_mode: bool,
     pub volume_percent: u8,
-    /// Watch only: connect using a separate PSN account with app controls disabled.
+    /// Watch only disables app controls and prefers a second account when linked.
     pub watch_only: bool,
 }
 
